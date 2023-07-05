@@ -5,7 +5,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.*
-import android.util.Log
+//import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -43,7 +43,7 @@ class BatteryService : Service() {
       }
       else {
         count++
-        Log.e("", "onStartCommand: $count")
+        //Log.e("", "onStartCommand: $count")
         if (count == 10) {
           count = 0
           doNotificationWork()
@@ -57,7 +57,7 @@ class BatteryService : Service() {
   
     bm = getSystemService(BATTERY_SERVICE) as BatteryManager
     notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-    Log.e("some", "onStartCommand: A" )
+    //Log.e("some", "onStartCommand: A" )
   
     super.onCreate()
   }
@@ -65,7 +65,7 @@ class BatteryService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     
     super.onStartCommand(intent, flags, startId)
-    Log.i("some", "Battery remember: started" )
+    //Log.i("some", "Battery remember: started" )
     if(!isAlreadyRunning){
       isAlreadyRunning=true
       if (intent?.action==null && lastBattery==-1){

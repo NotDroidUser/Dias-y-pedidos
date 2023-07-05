@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.afollestad.materialdialogs.MaterialDialog
 import com.afollestad.materialdialogs.datetime.datePicker
 import com.nobody.diasypedidos.databinding.ActivityMainBinding
+import java.io.File
 import java.util.*
 
 class MainActivity : AppCompatActivity(), DateAndNoteHandler {
@@ -77,16 +78,25 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
     if (requestCode == REQUEST_NOTE && resultCode == RESULT_OK) {
       data?.let { dataIs ->
-        Log.i(TAG, "onActivityResult: Aqui en el data")
         dataIs.extras?.let { extras ->
-          Log.i(TAG, "onActivityResult: Aqui en el extras")
           val old = extras.getParcelable<DateAndNote>(OLDNOTE)
           val new = extras.getParcelable<DateAndNote>(DATENOTE)
           val editable = extras.getBoolean(EDITNOTE, false)
           if (editable && new != null) {
             (binding.recycle.adapter as DateAndNoteAdapter).submitList(
-              loadData(this).list.toMutableList().apply {
+              loadData(this).list.toMutableList().also{
+                if(BuildConfig.DEBUG){
+                  Log.e(TAG, "onActivityResult: currentList:${(binding.recycle.adapter as DateAndNoteAdapter).currentList}", )
+                  Log.e(TAG, "onActivityResult: savedList:$it")
+                  Log.e(TAG, "onActivityResult: old:$old")
+                  Log.e(TAG, "onActivityResult: new:$new")
+                }
+              }.apply {
                 if (old != null) {
+                  if(new.picturePath!=old.picturePath) {
+                    if(File(old.picturePath).exists())
+                      File(old.picturePath).delete()
+                  }
                   remove(old)
                 }
                 if (!this.contains(new))
@@ -110,29 +120,68 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
       data?.data?.let { uri ->
         try {
           val actualData = loadData(this)
-          Log.e(TAG, "onActivityResult: "+(actualData).list.joinToString() )
-          saveDataExternally(actualData, contentResolver.openOutputStream(uri)!!)
+          if (BuildConfig.DEBUG) {
+            Log.e(TAG, "onActivityResult: "+(actualData).list.joinToString() )
+          }
+          saveDataExternallyOld(actualData, contentResolver.openOutputStream(uri)!!)
           Toast.makeText(this, "Datos exportados", Toast.LENGTH_SHORT).show()
         } catch (ex: Exception) {
+          if (BuildConfig.DEBUG) {
+            Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para exportar\n"+ex.stackTraceToString())
+          }
           Toast.makeText(this, "No se pudo abrir el archivo para exportar", Toast.LENGTH_SHORT).show()
-          Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para exportar\n"+ex.stackTraceToString())
         }
       }
     } else if (requestCode == REQUEST_SAF_IMPORT && resultCode == RESULT_OK) {
       data?.data?.let { uri ->
         try {
-          val dataLoaded = loadDataExternally(contentResolver.openInputStream(uri)!!)
+          val dataLoaded = loadDataExternallyOld(contentResolver.openInputStream(uri)!!)
           val list = dataLoaded.list
           loadData(this).list.toMutableList().apply {
             addAll(list)
           }.also {
             saveData(DateAndNoteSaver(it), this)
           }
+          updateList()
+          if (BuildConfig.DEBUG) {
+            Log.e(TAG, "onActivityResult: "+(dataLoaded).list.joinToString(), )
+          }
           Toast.makeText(this, "Datos Importados", Toast.LENGTH_SHORT).show()
-          Log.e(TAG, "onActivityResult: "+(dataLoaded).list.joinToString(), )
         } catch (ex: Exception) {
+          if (BuildConfig.DEBUG) {
+            Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para importar\n"+ex.stackTraceToString())
+          }
           Toast.makeText(this, "No se pudo abrir el archivo para importar", Toast.LENGTH_SHORT).show()
-          Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para importar\n"+ex.stackTraceToString())
+
+        }
+      }
+    }else if(requestCode == REQUEST_SAF_EXPORT_NEW && resultCode == RESULT_OK){
+      data?.data?.let {uri->
+        try {
+          saveDataExternally(contentResolver.openOutputStream(uri)!!,this)
+        }catch (ex: Exception) {
+          if (BuildConfig.DEBUG) {
+            Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para exportar\n"+ex.stackTraceToString())
+          }
+          Toast.makeText(this, "No se pudo abrir el archivo para exportar", Toast.LENGTH_SHORT).show()
+        }
+      }
+    }else if(requestCode == REQUEST_SAF_IMPORT_NEW && resultCode == RESULT_OK){
+      data?.data?.let {uri->
+        try {
+          if(verifyFile(contentResolver.openInputStream(uri)!!)){
+            loadDataExternally(contentResolver.openInputStream(uri)!!,this)
+            updateList()
+            Toast.makeText(this, "Datos Importados", Toast.LENGTH_SHORT).show()
+          }else {
+            Toast.makeText(this, "El archivo no es un backup de este programa", Toast.LENGTH_SHORT).show();
+          }
+        }catch (ex:Exception){
+          if (BuildConfig.DEBUG) {
+            Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para importar\n"+ex.stackTraceToString())
+          }
+          Toast.makeText(this, "No se pudo abrir el archivo para importar", Toast.LENGTH_SHORT).show()
+      
         }
       }
     } else {
@@ -144,11 +193,15 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     const val DATENOTE = "DATE&NOTE"
     const val EDITNOTE = "EDITNOTE"
     const val OLDNOTE = "OLDNOTE"
+    const val NEWPATH = "NEWPATH"
     const val DAYSEE = "DAYSEE"
     const val REQUEST_NOTE = 643
     private const val REQUEST_SAF_EXPORT: Int = 123123
     private const val REQUEST_SAF_IMPORT: Int = 123124
-    
+    private const val REQUEST_SAF_EXPORT_NEW: Int = 123125
+    private const val REQUEST_SAF_IMPORT_NEW: Int = 123126
+  
+  
   }
   
   override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -188,6 +241,14 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
         importData()
         true
       }
+      R.id.action_export_new-> {
+        exportDataNew()
+        true
+      }
+      R.id.action_import_new-> {
+        importDataNew()
+        true
+      }
       else -> super.onOptionsItemSelected(item)
     }
   }
@@ -196,8 +257,14 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
       .setType("application/json")
       .addCategory(Intent.CATEGORY_OPENABLE)
-    
     startActivityForResult(intent, REQUEST_SAF_EXPORT)
+  }
+  
+  private fun exportDataNew() {
+    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+      .setType("application/zip")
+      .addCategory(Intent.CATEGORY_OPENABLE)
+    startActivityForResult(intent, REQUEST_SAF_EXPORT_NEW)
   }
   
   private fun importData() {
@@ -206,6 +273,15 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
       .addCategory(Intent.CATEGORY_OPENABLE)
     
     startActivityForResult(intent, REQUEST_SAF_IMPORT)
+  }
+  
+  
+  private fun importDataNew() {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+      .setType("application/zip")
+      .addCategory(Intent.CATEGORY_OPENABLE)
+    
+    startActivityForResult(intent, REQUEST_SAF_IMPORT_NEW)
   }
   
   override fun onSaveInstanceState(outState: Bundle) {
@@ -230,6 +306,10 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
   override fun removeItem(item: DateAndNote) {
     val dateAndNoteAdapter = binding.recycle.adapter as DateAndNoteAdapter
     val c = loadData(this).list.toMutableList().apply {
+      //TODO INVESTIGATE HOW FUCKING WAY IT IS GETTING NULL :|
+      if(!item.picturePath.isNullOrBlank())
+        if(File(item.picturePath).exists())
+          File(item.picturePath).delete()
       remove(item)
     }.sortedBy {
       it.hours
@@ -254,6 +334,32 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
       REQUEST_NOTE)
   }
   
+  override fun modifyItem(old: DateAndNote, isChecked: Boolean) {
+    val dateAndNoteAdapter = binding.recycle.adapter as DateAndNoteAdapter
+    val c = loadData(this).list.toMutableList().apply {
+      this.remove(old)
+      old.finished=isChecked
+      this.add(old)
+    }.sortedBy {
+      it.hours
+    }.also {
+      saveData(DateAndNoteSaver(it.sortedBy { it.time }), this)
+    }.filter {
+      it.time > daysee &&
+        GregorianCalendar().apply {
+          timeInMillis = daysee
+          add(Calendar.DAY_OF_YEAR, 1)
+        }.timeInMillis > it.time
+    }
+    dateAndNoteAdapter.submitList(c)
+  }
+  
   override fun viewItem(item: DateAndNote) {
+    startActivity(
+      Intent(this,ViewPictureActivity::class.java)
+        .apply {
+          putExtra("path",item.picturePath)
+        }
+    )
   }
 }

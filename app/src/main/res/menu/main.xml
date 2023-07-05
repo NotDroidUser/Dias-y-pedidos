@@ -6,10 +6,25 @@
     <item
         android:id="@+id/action_goto_date"
         android:title="Ir a..." />
-    <item
-        android:id="@+id/action_export"
-        android:title="Exportar datos" />
-    <item
-        android:id="@+id/action_import"
-        android:title="Importar Datos" />
+    <item android:title="Exportar datos">
+        <menu>
+            <item
+                android:id="@+id/action_export"
+                android:title="Exportar datos sin fotos" />
+            <item
+                android:id="@+id/action_export_new"
+                android:title="Exportar datos con fotos" />
+        </menu>
+    </item>
+    <item android:title="Importar Datos">
+        <menu>
+            <item
+                android:id="@+id/action_import"
+                android:title="Importar Datos sin fotos" />
+            <item
+                android:id="@+id/action_import_new"
+                android:title="Importar Datos con fotos" />
+
+        </menu>
+    </item>
 </menu>
