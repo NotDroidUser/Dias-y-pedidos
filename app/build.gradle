@@ -1,10 +1,11 @@
 plugins {
 	id 'com.android.application'
 	id 'org.jetbrains.kotlin.android'
+	id "org.jetbrains.kotlin.plugin.serialization"
 }
 
 android {
-	compileSdkVersion 33
+	compileSdkVersion 34
 	buildToolsVersion "34.0.0"
 
 	namespace 'com.nobody.diasypedidos'
@@ -12,9 +13,9 @@ android {
 	defaultConfig {
 		applicationId "com.nobody.diasypedidos"
 		minSdkVersion 21
-		targetSdkVersion 33
-		versionCode 4
-		versionName "1.1.4"
+		targetSdkVersion 34
+		versionCode 5
+		versionName "1.2.0"
 		testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 	}
 
@@ -41,19 +42,17 @@ android {
 }
 
 dependencies {
-	implementation "org.apache.commons:commons-compress:1.20"
-	implementation 'androidx.core:core-ktx:1.10.1'
+	implementation 'org.apache.commons:commons-compress:1.25.0'
+	implementation 'androidx.core:core-ktx:1.12.0'
 	implementation 'androidx.appcompat:appcompat:1.6.1'
-	implementation 'com.google.android.material:material:1.9.0'
-	implementation "com.google.code.gson:gson:2.9.0"
+	implementation 'com.google.android.material:material:1.11.0'
+	implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1"
 	implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-	implementation 'androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.1'
-	implementation 'androidx.lifecycle:lifecycle-process:2.6.1'
 	implementation "com.afollestad.material-dialogs:datetime:3.1.1"
 	implementation "com.afollestad.material-dialogs:core:3.1.1"
 	testImplementation 'junit:junit:4.13.2'
 	androidTestImplementation 'androidx.test.ext:junit:1.1.5'
 	androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-	implementation "org.jetbrains.kotlin:kotlin-stdlib:1.8.21"
-	implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.21"
+	implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.21'
+	implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.21'
 }

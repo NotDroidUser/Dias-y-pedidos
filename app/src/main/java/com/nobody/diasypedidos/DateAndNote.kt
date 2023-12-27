@@ -2,6 +2,7 @@ package com.nobody.diasypedidos
 
 import android.content.Context
 import android.graphics.drawable.Drawable
+import android.os.Bundle
 import android.os.Parcel
 import android.os.Parcelable
 import android.util.Log
@@ -9,13 +10,14 @@ import android.view.LayoutInflater
 import android.view.MenuInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.annotation.NonNull
 import androidx.core.view.forEach
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.google.gson.GsonBuilder
 import com.nobody.diasypedidos.databinding.DateNoteHolderBinding
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
@@ -28,18 +30,20 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.*
 
-val settingsFile = "DateAndNote.json"
+const val settingsFile = "DateAndNote.json"
 
+@Serializable
 data class DateAndNote(var time: Long,
                        var hours: Int = 0,
                        var minutes: Int =0,
                        var text: String,
                        var direction: String = "",
                        var app:String = "",
-                       @com.google.gson.annotations.SerializedName("pic")
-                       @NonNull
+                       //@SerializedName("pic")
+                       @SerialName("pic")
                        var picturePath:String = "",
-                       @com.google.gson.annotations.SerializedName("")
+                       //@SerializedName("")
+                       @SerialName("")
                        var finished:Boolean=false) : Parcelable {
     constructor(parcel: Parcel) : this(
       parcel.readLong(),
@@ -78,6 +82,7 @@ data class DateAndNote(var time: Long,
 }
 
 
+@Serializable
 class DateAndNoteSaver(var list:List<DateAndNote>)
 
 data class DateOf(var time:Long, var hours: Int=0,var minutes:Int=0){
@@ -115,7 +120,7 @@ data class DateOf(var time:Long, var hours: Int=0,var minutes:Int=0){
 //}
 
 fun saveData(toSave: DateAndNoteSaver,context: Context) {
-    val saved = GsonBuilder().setPrettyPrinting().create().toJson(toSave)
+    val saved = json.encodeToString(DateAndNoteSaver.serializer(),toSave)
     val out = context.openFileOutput(settingsFile, Context.MODE_PRIVATE)
     out.writer().buffered().also {
         it.write(saved)
@@ -137,8 +142,10 @@ fun saveDataExternally(out:OutputStream,context:Context) {
     zipOut.close()
 }
 
-fun saveDataExternallyOld(toSave: DateAndNoteSaver,out:OutputStream) {
-    val saved = GsonBuilder().setPrettyPrinting().create().toJson(toSave)
+private val json = Json { ignoreUnknownKeys = true }
+
+fun saveDataExternallyOld(toSave: DateAndNoteSaver, out:OutputStream) {
+    val saved = json.encodeToString(DateAndNoteSaver.serializer(),toSave)
     out.writer().buffered().also {
         it.write(saved)
         it.flush()
@@ -146,12 +153,21 @@ fun saveDataExternallyOld(toSave: DateAndNoteSaver,out:OutputStream) {
     }
 }
 
+inline fun <reified T : Parcelable> Bundle.getParcelableCompat(str:String): T? {
+    return if(android.os.Build.VERSION_CODES.TIRAMISU <= android.os.Build.VERSION.SDK_INT){
+        getParcelable(str, T::class.java)
+    }else{
+        //tiramisu making things better to avoid
+        @Suppress("DEPRECATION")
+        getParcelable(str)
+    }
+}
+
 fun loadData(context: Context): DateAndNoteSaver {
     return try {
         val input: FileInputStream = context.openFileInput(settingsFile)
         val toLoad = input.reader().buffered().readText()
-        GsonBuilder().setPrettyPrinting().create().fromJson(toLoad, DateAndNoteSaver::class.java)
-            ?: DateAndNoteSaver(listOf())
+        json.decodeFromString(DateAndNoteSaver.serializer(),toLoad)
     }catch(e:FileNotFoundException){
         DateAndNoteSaver(listOf())
     }
@@ -161,14 +177,15 @@ fun verifyFile(input: InputStream): Boolean {
     val entries = mutableListOf<ZipArchiveEntry>()
     val zipArchiveInputStream= ZipArchiveInputStream(input)
     var isBackup=false
-    var entry = zipArchiveInputStream.nextZipEntry
+    var entry = zipArchiveInputStream.nextEntry
     try {
         while (entry!=null){
             entries.add(entry)
             isBackup=entry.name.contains(settingsFile)||isBackup
-            entry = zipArchiveInputStream.nextZipEntry
+            entry = zipArchiveInputStream.nextEntry
         }
     }catch (_:IOException){
+    
     }
     return isBackup
 }
@@ -188,31 +205,30 @@ fun clearData(context: Context){
 fun loadDataExternally(input: InputStream,context: Context) {
     clearData(context)
     val zipArchiveInputStream= ZipArchiveInputStream(input)
-    var entry = zipArchiveInputStream.nextZipEntry
+    var entry = zipArchiveInputStream.nextEntry
     try {
         while (entry!=null){
             val file = context.openFileOutput(entry.name, Context.MODE_PRIVATE)
             zipArchiveInputStream.copyTo(file)
             file.flush()
             file.close()
-            entry = zipArchiveInputStream.nextZipEntry
+            entry = zipArchiveInputStream.nextEntry
         }
     }catch (ex:IOException){
-        Log.e("LOAD FILE:", "loadDataExternally: ${ex.stackTrace}", )
+        Log.e("LOAD FILE:", "loadDataExternally Failed: ${ex.stackTrace}")
     }
 }
 
 fun loadDataExternallyOld(input: InputStream): DateAndNoteSaver {
     return try {
         val toLoad = input.reader().buffered().readText()
-        GsonBuilder().setPrettyPrinting().create().fromJson(toLoad, DateAndNoteSaver::class.java)
-            ?: DateAndNoteSaver(listOf())
+        json.decodeFromString(DateAndNoteSaver.serializer(),toLoad)
     }catch(e:FileNotFoundException){
         DateAndNoteSaver(listOf())
     }
 }
 
-class DateAndNoteAdapter(var dateAndNoteHandler:DateAndNoteHandler):ListAdapter<DateAndNote,DateAndNoteAdapter.DateAndNoteHolder>(object :DiffUtil.ItemCallback<DateAndNote>(){
+class DateAndNoteAdapter(private var dateAndNoteHandler:DateAndNoteHandler):ListAdapter<DateAndNote,DateAndNoteAdapter.DateAndNoteHolder>(object :DiffUtil.ItemCallback<DateAndNote>(){
     override fun areItemsTheSame(oldItem: DateAndNote, newItem: DateAndNote): Boolean {
         return oldItem.text==newItem.text &&
             oldItem.picturePath==newItem.picturePath
@@ -264,18 +280,19 @@ class DateAndNoteAdapter(var dateAndNoteHandler:DateAndNoteHandler):ListAdapter<
                 }
             }
             appView.text=item.app
-            if (item.picturePath.isNullOrBlank()) {
-                photoView.visibility=View.GONE
-            } else if(!File(item.picturePath).exists()) {
+            if(File(item.picturePath).exists()) {
                 photoView.setImageDrawable(Drawable.createFromPath(item.picturePath))
             }else{
                 photoView.visibility=View.GONE
             }
             photoView.setOnClickListener {
+                dateAndNoteHandler.viewPicture(item)
+            }
+            root.setOnClickListener{
                 dateAndNoteHandler.viewItem(item)
             }
             finished.isChecked=item.finished
-            finished.setOnCheckedChangeListener { buttonView, isChecked ->
+            finished.setOnCheckedChangeListener { _, isChecked ->
                 dateAndNoteHandler.modifyItem(old = item, isChecked)
             }
         }
@@ -287,6 +304,7 @@ interface DateAndNoteHandler{
     fun removeItem(item:DateAndNote)
     fun editItem(item:DateAndNote)
     fun modifyItem(old:DateAndNote, isChecked:Boolean)
+    fun viewPicture(item: DateAndNote)
     fun viewItem(item:DateAndNote)
 }
 

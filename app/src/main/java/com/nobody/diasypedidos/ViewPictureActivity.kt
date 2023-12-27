@@ -8,7 +8,7 @@ import com.nobody.diasypedidos.databinding.ViewPictureBinding
 
 class ViewPictureActivity: AppCompatActivity() {
   
-  val binding:ViewPictureBinding by lazy {
+  private val binding:ViewPictureBinding by lazy {
     ViewPictureBinding.inflate(layoutInflater)
   }
   
