@@ -281,6 +281,7 @@ class DateAndNoteAdapter(private var dateAndNoteHandler:DateAndNoteHandler):List
             }
             appView.text=item.app
             if(File(item.picturePath).exists()) {
+                photoView.visibility=View.VISIBLE
                 photoView.setImageDrawable(Drawable.createFromPath(item.picturePath))
             }else{
                 photoView.visibility=View.GONE
