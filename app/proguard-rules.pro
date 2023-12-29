@@ -20,3 +20,9 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
+#tests only now
+#-keep class com.google.gson.** { *; }
+
+-keep class kotlinx.serialization.** { *; }
+-keep class org.apache.commons.compress.archivers.zip.** { *; }
+-keep class com.github.luben.zstd.** { *; }
