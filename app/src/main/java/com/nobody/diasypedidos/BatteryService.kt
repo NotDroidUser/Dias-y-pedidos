@@ -1,5 +1,6 @@
 package com.nobody.diasypedidos
 
+import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -51,7 +52,11 @@ class BatteryService : Service() {
           count = 0
           doNotificationWork()
         }
-        this.sendMessageDelayed(Message(), 10000)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && PermissionChecker.checkSelfPermission(applicationContext,android.Manifest.permission.POST_NOTIFICATIONS)!=PermissionChecker.PERMISSION_GRANTED) {
+          this.sendMessageDelayed(Message(), 50000)
+        }else{
+          this.sendMessageDelayed(Message(), 10000)
+        }
       }
     }
   }
@@ -109,24 +114,30 @@ class BatteryService : Service() {
         val dayAfter: Long= GregorianCalendar().apply { setCalendarDateOnly();add(Calendar.DAY_OF_YEAR,2) }.timeInMillis
         val count = loadData(applicationContext).list.count { it.time in (dayToSee + 1) until dayAfter }
         if (count >0) {
-          if(PermissionChecker.checkSelfPermission(applicationContext,android.Manifest.permission.POST_NOTIFICATIONS)==PermissionChecker.PERMISSION_GRANTED) {
-            NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID,
-              NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentText("Tienes $count pendientes para mañana" + if (battery < 40) {
-                  " y pon a cargar"
-                } else "")
-                .setContentTitle("RECUERDA")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(PendingIntent.getActivity(applicationContext,
-                  0,Intent(applicationContext,MainActivity::class.java),PendingIntent.FLAG_MUTABLE))
-                .build())
-          }else{
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && PermissionChecker.checkSelfPermission(applicationContext,android.Manifest.permission.POST_NOTIFICATIONS)!=PermissionChecker.PERMISSION_GRANTED) {
             Toast.makeText(this, "Tienes $count pendientes para mañana", Toast.LENGTH_SHORT).show()
+          }
+          else{
+            doNotification(battery, count)
           }
         }
       }
     }
+  }
+  
+  @SuppressLint("MissingPermission")
+  fun doNotification(battery:Int,count:Int){
+    NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID,
+      NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentText("Tienes $count pendientes para mañana" + if (battery < 40) {
+          " y pon a cargar"
+        } else "")
+        .setContentTitle("RECUERDA")
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setContentIntent(PendingIntent.getActivity(applicationContext,
+          0,Intent(applicationContext,MainActivity::class.java),PendingIntent.FLAG_MUTABLE))
+        .build())
   }
   
   override fun onDestroy() {

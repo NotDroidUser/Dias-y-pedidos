@@ -35,6 +35,12 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     const val DEBUG=true
   }
   
+  private val notificationPermission=(registerForActivityResult(ActivityResultContracts.RequestPermission()){ result->
+    if(!result){
+      Toast.makeText(this, "Se utilizaran estos carteles", Toast.LENGTH_SHORT).show();
+    }
+  })
+  
   private val newEditNoteContract=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result->
     if (result.resultCode == RESULT_OK) {
       result.data?.let { dataIs ->
