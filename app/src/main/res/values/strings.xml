@@ -1,3 +1,18 @@
 <resources>
-    <string name="app_name">Dias y pedidos</string>
+    <string name="app_name">Días y pedidos</string>
+    <string name="import_error">En una importación anterior parece que ocurrió un error no esperado,
+        reintente y si no funcionara reporte esto en Github.</string>
+    <string name="import_progress">Importando datos de versión anterior.</string>
+    <string name="dialog_battery_service">A partir de Android 6 el sistema duerme
+        los servicios después de un tiempo ya que había servicios malintencionados
+        que usaban demasiados recursos en segundo plano (ubicación, datos, etc),
+        si el servicio duerme no se puede asegurar que las notificaciones lleguen
+        en tiempo, ¿Desea permitir que el servicio corra en segundo plano?, esto
+        no debe gastar mas de 1% de su carga ya que las notificaciones se envían
+        máximo una vez cada 4h en caso que tenga pedidos</string>
+    <string name="notification_dialog">A partir de Android 13 es necesario pedir permiso para
+        poderle enviar las notificaciones de los pedidos, ¿Desea permitir esto?</string>
+    <string name="tomorrow_count">Tienes %1$s pendientes para mañana</string>
+    <string name="left">←</string>
+    <string name="right">→</string>
 </resources>

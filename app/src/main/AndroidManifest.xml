@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Just in case if going below again -->
+    <uses-permission-sdk-23 android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission-sdk-23 android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -20,10 +27,9 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".AddActivity"/>
+        <activity android:name=".DateAndNoteAddActivity"/>
         <activity android:name=".ViewPictureActivity"/>
         <activity android:name=".ViewNoteActivity"/>
-        <service android:name=".BatteryService"/>
     </application>
 
 </manifest>

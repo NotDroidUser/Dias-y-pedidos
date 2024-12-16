@@ -1,99 +1,134 @@
 package com.nobody.diasypedidos
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
+import android.view.GestureDetector
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.afollestad.materialdialogs.MaterialDialog
 import com.afollestad.materialdialogs.datetime.datePicker
 import com.nobody.diasypedidos.databinding.ActivityMainBinding
+import com.nobody.diasypedidos.db.DateAndNoteDB
+import com.nobody.diasypedidos.db.DateAndNotesDatabase
+import com.nobody.diasypedidos.vm.DateAndNoteViewModel
+import com.nobody.diasypedidos.vm.DateAndNoteViewModelFactory
 import java.io.File
-import java.util.*
+import java.util.GregorianCalendar
+import java.util.concurrent.TimeUnit
+import kotlin.math.absoluteValue
 
 class MainActivity : AppCompatActivity(), DateAndNoteHandler {
-  private var daysee: Long = GregorianCalendar().apply { setCalendarDateOnly() }.timeInMillis
+
   private val binding: ActivityMainBinding by lazy {
     ActivityMainBinding.inflate(layoutInflater)
+  }
+
+  private val gestureDetector by lazy{
+    GestureDetector(this,OnSwipeDetector())
+  }
+  
+  private val settings by lazy {
+    getSharedPreferences("Settings", Context.MODE_PRIVATE)
+  }
+  
+  private val vm: DateAndNoteViewModel by viewModels<DateAndNoteViewModel>{
+    DateAndNotesDatabase.getInstance(this)
+    DateAndNoteViewModelFactory
+  }
+  
+  private val importDialog:AlertDialog by lazy {
+    AlertDialog.Builder(this).apply {
+      this.setMessage("Se estan importando los datos desde el archivo, este dialogo se cerrara solo, cuando termine el proceso.")
+      this.setCancelable(false)
+      this.setTitle("Importando datos")
+    }.create()
+  }
+
+  private val exportDialog:AlertDialog by lazy {
+    AlertDialog.Builder(this).apply {
+      this.setMessage("Se estan exportando los datos desde la aplicacion, este dialogo se cerrara solo, cuando termine el proceso.")
+      this.setCancelable(false)
+      this.setTitle("Exportando datos")
+    }.create()
   }
   
   companion object {
     private const val TAG: String = "MainActivity"
     const val DATENOTE = "DATE&NOTE"
     const val OLDNOTE = "OLDNOTE"
-    const val NEWPATH = "NEWPATH"
-    const val DAYSEE = "DAYSEE"
-    const val DEBUG=true
+    const val DEBUG=false
+    const val NOTIFICATION_DIALOG="NOTIFICATION_DIALOG"
+    const val BATTERY_DIALOG="BATTERY_DIALOG"
   }
   
-  private val notificationPermission=(registerForActivityResult(ActivityResultContracts.RequestPermission()){ result->
+  private val notificationPermission = (registerForActivityResult(ActivityResultContracts.RequestPermission()){ result->
     if(!result){
-      Toast.makeText(this, "Se utilizaran estos carteles", Toast.LENGTH_SHORT).show();
+      Toast.makeText(this, "Se utilizaran Toasts", Toast.LENGTH_SHORT).show()
+    }
+  })
+  
+  @SuppressLint("BatteryLife")
+  private val batterySaverPermission = (registerForActivityResult(ActivityResultContracts.RequestPermission()){ result->
+    if(result){
+      val pm = getSystemService(POWER_SERVICE) as PowerManager
+      if(!pm.isIgnoringBatteryOptimizations(packageName)){
+        Intent().apply {
+          setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+          setData(Uri.parse("package:$packageName"))
+          startActivity(this)
+        }
+      }
     }
   })
   
   private val newEditNoteContract=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result->
     if (result.resultCode == RESULT_OK) {
-      result.data?.let { dataIs ->
-        dataIs.extras?.let { extras ->
-          val old = extras.getParcelableCompat<DateAndNote>(OLDNOTE)
-          val new = extras.getParcelableCompat<DateAndNote>(DATENOTE)
-          if ( new != null) {
-            (binding.recycle.adapter as DateAndNoteAdapter).submitList(
-              loadData(this).list.toMutableList().also{
-                if(DEBUG){
-                  Log.i(TAG, "onActivityResult: currentList:${(binding.recycle.adapter as DateAndNoteAdapter).currentList}" )
-                  Log.i(TAG, "onActivityResult: savedList:$it")
-                  Log.i(TAG, "onActivityResult: old:$old")
-                  Log.i(TAG, "onActivityResult: new:$new")
-                }
-              }.apply {
-                if (old != null) {
-                  if(new.picturePath!=old.picturePath) {
-                    if(File(old.picturePath).exists())
-                      File(old.picturePath).delete()
-                  }
-                  remove(old)
-                }
-                if (!this.contains(new))
-                  add(new)
-              }.sortedBy {
-                it.hours
-              }.also {
-                saveData(DateAndNoteSaver(it), this)
-              }.filter {
-                it.time > daysee &&
-                  GregorianCalendar().apply {
-                    timeInMillis = daysee
-                    add(Calendar.DAY_OF_YEAR, 1)
-                  }.timeInMillis > it.time
-              }
-            )
-          } else throw IllegalArgumentException(" The \"new\" must be a note")
+      result.data?.let { dataIsNotNull ->
+        dataIsNotNull.extras?.let { extras ->
+          val old = extras.getParcelableCompat<DateAndNoteDB>(OLDNOTE)
+          val new = extras.getParcelableCompat<DateAndNoteDB>(DATENOTE)
+          if ( new != null && old != null) {
+            if(new.picturePath!=old.picturePath && File(old.picturePath).exists()) {
+              File(old.picturePath).delete()
+            }
+            if(old.id!=null){
+              vm.editNote( new.apply { id = old.id })
+            }
+            else{
+              vm.addNote(new)
+            }
+          } else throw IllegalArgumentException(" The \"new one\" must be a note")
         }
       }
     }
   }
   
-  private val exportData= registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result->
+  private val exportJson= registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result->
     if ( result.resultCode == RESULT_OK) {
       result.data?.data?.let { uri ->
         try {
-          val actualData = loadData(this)
-          if (DEBUG) {
-            Log.e(TAG, "onActivityResult: "+(actualData).list.joinToString() )
-          }
-          saveDataExternallyOld(actualData, contentResolver.openOutputStream(uri)!!)
-          Toast.makeText(this, "Datos exportados", Toast.LENGTH_SHORT).show()
+          vm.saveDataToJson(contentResolver.openOutputStream(uri)!!)
         } catch (ex: Exception) {
           if (DEBUG) {
             Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para exportar\n"+ex.stackTraceToString())
@@ -104,22 +139,11 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     }
   }
   
-  private val importData=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result ->
+  private val importJson=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result ->
     if ( result.resultCode == RESULT_OK) {
       result.data?.data?.let { uri ->
         try {
-          val dataLoaded = loadDataExternallyOld(contentResolver.openInputStream(uri)!!)
-          val list = dataLoaded.list
-          loadData(this).list.toMutableList().apply {
-            addAll(list)
-          }.also {
-            saveData(DateAndNoteSaver(it), this)
-          }
-          updateList()
-          if (DEBUG) {
-            Log.e(TAG, "onActivityResult: "+(dataLoaded).list.joinToString())
-          }
-          Toast.makeText(this, "Datos Importados", Toast.LENGTH_SHORT).show()
+          vm.importDataFromJson(contentResolver.openInputStream(uri)!!,filesDir)
         } catch (ex: Exception) {
           if (DEBUG) {
             Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para importar\n"+ex.stackTraceToString())
@@ -130,12 +154,12 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     }
   }
   
-  private val exportNewData=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result ->
+  private val exportZip=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result ->
     if(result.resultCode == RESULT_OK){
       result.data?.data?.let {uri->
         try {
-          saveDataExternally(contentResolver.openOutputStream(uri)!!,this)
-        }catch (ex: Exception) {
+          vm.saveDataToZip(contentResolver.openOutputStream(uri)!!,this.filesDir)
+        } catch (ex: Exception) {
           if (DEBUG) {
             Log.e(TAG, "onActivityResult: No se pudo abrir el archivo para exportar\n"+ex.stackTraceToString())
           }
@@ -145,16 +169,14 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     }
   }
   
-  private val importNewData=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result->
+  private val importZip=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result->
     if(result.resultCode == RESULT_OK){
       result.data?.data?.let {uri->
         try {
-          if(verifyFile(contentResolver.openInputStream(uri)!!)){
-            loadDataExternally(contentResolver.openInputStream(uri)!!,this)
-            updateList()
-            Toast.makeText(this, "Datos Importados", Toast.LENGTH_SHORT).show()
-          } else {
-            Toast.makeText(this, "El archivo no es un backup de este programa", Toast.LENGTH_SHORT).show();
+          vm.loadDataFromZipAndImport(contentResolver.openInputStream(uri)!!,contentResolver.openInputStream(uri)!!,this.filesDir){
+            Toast.makeText(this,
+              "Fallo la importacion, verifique el archivo para importar sea valido",
+              Toast.LENGTH_SHORT).show()
           }
         }catch (ex:Exception){
           if (DEBUG) {
@@ -166,51 +188,181 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     }
   }
   
+  override fun onTouchEvent(event: MotionEvent): Boolean {
+    return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event)
+  }
+  
+  fun swipeToRight(){
+    binding.nextDayButton.callOnClick()
+  }
+  
+  fun swipeToLeft(){
+    binding.backDayButton.callOnClick()
+  }
+  
+  inner class OnSwipeDetector:GestureDetector.OnGestureListener{
+    
+    override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+      val diffx=(e1?:e2).x -e2.x
+      val diffy= ((e1?:e2).y -e2.y)
+      if(DEBUG){
+        Log.e(TAG, "onFling: ${diffx.absoluteValue}" )
+      }
+      if(diffy.absoluteValue<diffx.absoluteValue&&diffx.absoluteValue>100 && velocityX.absoluteValue >100){
+          if(diffx>0){
+            swipeToRight()
+            return true
+          }else{
+            swipeToLeft()
+            return true
+          }
+      }
+      
+      return false
+    }
+    
+    override fun onDown(e: MotionEvent)=false
+    override fun onShowPress(e: MotionEvent) {}
+    override fun onSingleTapUp(e: MotionEvent)=false
+    override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float)=false
+    override fun onLongPress(e: MotionEvent) {}
+
+  }
+  
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    savedInstanceState?.let {
-      daysee = it.getLong(DAYSEE, daysee)
+    
+    WorkManager.getInstance(this)
+      .enqueueUniquePeriodicWork(
+        "Notifications",
+        ExistingPeriodicWorkPolicy.UPDATE,
+        PeriodicWorkRequestBuilder<NotificationWorker>(
+          repeatInterval = 4,
+          repeatIntervalTimeUnit =  TimeUnit.HOURS
+        ).setInitialDelay(1,TimeUnit.HOURS).build()
+      )
+    
+    if(DEBUG){
+      settings.edit().putBoolean(NOTIFICATION_DIALOG,false).apply()
+      settings.edit().putBoolean(BATTERY_DIALOG,false).apply()
     }
+    
+    with(binding) {
+      
+      setContentView(root)
+      
+      daySeeText.also {
+        it.setOnClickListener { showSelectDayDialog() }
+      }.text = dateToText(vm.daySeeing)
+      
+      val dateAndNoteAdapter = DateAndNoteAdapter(this@MainActivity)
+      recycle.layoutManager = LinearLayoutManager(this@MainActivity)
+      recycle.adapter = dateAndNoteAdapter
+      
+      fab.setOnClickListener {
+        newEditNoteContract.launch(Intent(this@MainActivity, DateAndNoteAddActivity::class.java))
+      }
+      
+      nextDayButton.setOnClickListener {
+        vm.daySeeing = vm.daySeeing.addDays(1)
+        daySeeText.text = dateToText(vm.daySeeing)
+      }
+      
+      backDayButton.setOnClickListener {
+        vm.daySeeing = vm.daySeeing.addDays(-1)
+        daySeeText.text = dateToText(vm.daySeeing)
+      }
+      
+      with(vm) {
+        val contextFiles = this@MainActivity.filesDir
+        
+        File(contextFiles, ".importing").apply {
+          if (!exists()) {
+            File(contextFiles, settingsFile).let { settings ->
+              if (settings.exists()) {
+                vm.importOldData(openFileInput(settingsFile),this@MainActivity.filesDir)
+                Toast.makeText(this@MainActivity, getString(R.string.import_progress), Toast.LENGTH_SHORT).show()
+              }
+            }
+          } else {
+            
+            delete()
+            
+            File(contextFiles, settingsFile).let {
+              if(exists())
+                delete()
+            }
+            
+            AlertDialog.Builder(this@MainActivity).setMessage(getString(R.string.import_error)).create().also { dial ->
+              Thread {
+                Thread.sleep(2000)
+                if (dial.isShowing) {
+                  dial.hide()
+                }
+              }
+            }.show()
+            
+          }
+        }
+        
+        list.observe(this@MainActivity) { list ->
+          dateAndNoteAdapter.submitList(list)
+        }
+        
+        importing.observe(this@MainActivity) { importing ->
+          if (importing) {
+            importDialog.show()
+          } else {
+            importDialog.cancel()
+          }
+        }
+        
+        exporting.observe(this@MainActivity) { exporting ->
+          if (exporting) {
+            exportDialog.show()
+          } else {
+            exportDialog.cancel()
+          }
+        }
+      }
+    }
+    
+    
+    //TODO Just in case that going below M again
+    @SuppressLint("ObsoleteSdkInt")
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !settings.getBoolean(BATTERY_DIALOG,false)) {
+      AlertDialog.Builder(this).setMessage(getString(R.string.dialog_battery_service)).setPositiveButton("Si"){ dial, _->
+        batterySaverPermission.launch(android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+        dial.dismiss()
+        settings.edit().putBoolean(BATTERY_DIALOG,true).apply()
+      }.setNegativeButton("No") { dial, _ ->
+        dial.dismiss()
+        settings.edit().putBoolean(BATTERY_DIALOG,true).apply()
+      }.show()
+    }
+    
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      NotificationManagerCompat.from(this).createNotificationChannel(NotificationChannel(BatteryService.NOTIFICATION_CHANNEL, "Pedidos", NotificationManager.IMPORTANCE_HIGH))
+      NotificationManagerCompat.from(this)
+        .createNotificationChannel(
+          NotificationChannel(NotificationWorker.NOTIFICATION_CHANNEL,
+            "Pedidos",
+            NotificationManager.IMPORTANCE_DEFAULT)
+        )
     }
-    setContentView(binding.root)
-    binding.daySeeText.text = DateOf(daysee).toText()
-    val dateAndNoteAdapter = DateAndNoteAdapter(this)
-    binding.recycle.layoutManager = LinearLayoutManager(this)
-    binding.recycle.adapter = dateAndNoteAdapter
-    dateAndNoteAdapter.submitList(loadData(this).list.filter {
-      it.time > daysee &&
-        GregorianCalendar().apply {
-          timeInMillis = daysee
-          add(Calendar.DAY_OF_YEAR, 1)
-        }.timeInMillis > it.time
-    }.sortedBy {
-      it.minutes
-    }.sortedBy {
-      it.hours
-    })
-    binding.fab.setOnClickListener {
-      newEditNoteContract.launch(Intent(this@MainActivity, AddActivity::class.java))
+    
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&  !settings.getBoolean(NOTIFICATION_DIALOG,false)) {
+      AlertDialog.Builder(this).setMessage(getString(R.string.notification_dialog)).setPositiveButton("Si"){ dial, _->
+        notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        dial.dismiss()
+        settings.edit().putBoolean(NOTIFICATION_DIALOG,true).commit()
+      }.setNegativeButton("No") { dial, _ -> dial
+        .dismiss()
+        settings.edit().putBoolean(NOTIFICATION_DIALOG,true).commit()
+      }.show()
     }
-    binding.nextDayButton.setOnClickListener {
-      daysee = GregorianCalendar().apply {
-        timeInMillis = daysee
-        add(Calendar.DAY_OF_YEAR, 1)
-      }.timeInMillis
-      binding.daySeeText.text = DateOf(daysee).toText()
-      updateList()
-    }
-    binding.backDayButton.setOnClickListener {
-      daysee = GregorianCalendar().apply {
-        timeInMillis = daysee
-        add(Calendar.DAY_OF_YEAR, -1)
-      }.timeInMillis
-      binding.daySeeText.text = DateOf(daysee).toText()
-      updateList()
-    }
-    if (!BatteryService.isAlreadyRunning)
-      startService(Intent(this, BatteryService::class.java).apply { action = BatteryService.ACTION_START })
+    
+//    if (!BatteryService.isAlreadyRunning)
+//      startService(Intent(this, BatteryService::class.java).apply { action = BatteryService.ACTION_START })
   }
   
   
@@ -222,47 +374,34 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
   override fun onOptionsItemSelected(item: MenuItem): Boolean {
     return when (item.itemId) {
       R.id.action_goto_day -> {
-        daysee = GregorianCalendar().let {
-          it.setCalendarDateOnly()
-          it.timeInMillis
-        }
-        updateList()
-        binding.daySeeText.text = DateOf(daysee).toText()
+        vm.daySeeing = GregorianCalendar().dateOnly().timeInMillis
+        binding.daySeeText.text = dateToText(vm.daySeeing)
         true
       }
       R.id.action_goto_date -> {
-        MaterialDialog(this).show {
-          datePicker { _, datetime ->
-            daysee = datetime.let {
-              it.setCalendarDateOnly()
-              it.timeInMillis
-            }
-            updateList()
-            binding.daySeeText.text = DateOf(daysee).toText()
-          }
-        }
+        showSelectDayDialog()
         true
       }
       R.id.action_export -> {
-        exportData.launch(Intent(Intent.ACTION_CREATE_DOCUMENT)
-          .setType("application/json")
-          .addCategory(Intent.CATEGORY_OPENABLE))
-        true
-      }
-      R.id.action_import -> {
-        importData.launch(Intent(Intent.ACTION_OPEN_DOCUMENT)
+        exportJson.launch(Intent(Intent.ACTION_CREATE_DOCUMENT)
           .setType("application/json")
           .addCategory(Intent.CATEGORY_OPENABLE))
         true
       }
       R.id.action_export_new-> {
-        exportNewData.launch(Intent(Intent.ACTION_CREATE_DOCUMENT)
+        exportZip.launch(Intent(Intent.ACTION_CREATE_DOCUMENT)
           .setType("application/zip")
           .addCategory(Intent.CATEGORY_OPENABLE))
         true
       }
+      R.id.action_import -> {
+        importJson.launch(Intent(Intent.ACTION_OPEN_DOCUMENT)
+          .setType("application/json")
+          .addCategory(Intent.CATEGORY_OPENABLE))
+        true
+      }
       R.id.action_import_new-> {
-        importNewData.launch(Intent(Intent.ACTION_OPEN_DOCUMENT)
+        importZip.launch(Intent(Intent.ACTION_OPEN_DOCUMENT)
           .setType("application/zip")
           .addCategory(Intent.CATEGORY_OPENABLE))
         true
@@ -271,80 +410,42 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
     }
   }
   
-  override fun onSaveInstanceState(outState: Bundle) {
-    super.onSaveInstanceState(outState)
-    outState.putLong(DAYSEE, daysee)
-  }
-  
-  private fun updateList() {
-    val dateAndNoteAdapter = binding.recycle.adapter as DateAndNoteAdapter
-    dateAndNoteAdapter.submitList(loadData(this).list.filter {
-      it.time > daysee &&
-        GregorianCalendar().apply {
-          timeInMillis = daysee
-          add(Calendar.DAY_OF_YEAR, 1)
-        }.timeInMillis > it.time
-    }.sortedBy {
-      it.hours
-    })
-  }
-  
-  override fun removeItem(item: DateAndNote) {
-    val dateAndNoteAdapter = binding.recycle.adapter as DateAndNoteAdapter
-    val c = loadData(this).list.toMutableList().apply {
-      if(item.picturePath.isNotBlank())
-        if(File(item.picturePath).exists())
-          File(item.picturePath).delete()
-      remove(item)
-    }.sortedBy {
-      it.hours
-    }.also {list ->
-      saveData(DateAndNoteSaver(list), this)
-    }.filter {
-      it.time > daysee &&
-        GregorianCalendar().apply {
-          timeInMillis = daysee
-          add(Calendar.DAY_OF_YEAR, 1)
-        }.timeInMillis > it.time
+  private fun showSelectDayDialog() {
+    MaterialDialog(this).show {
+      datePicker { _, datetime ->
+        vm.daySeeing = datetime.let {
+          it.dateOnly()
+          it.timeInMillis
+        }
+        binding.daySeeText.text = dateToText(vm.daySeeing)
+      }
     }
-    dateAndNoteAdapter.submitList(c)
   }
   
-  override fun editItem(item: DateAndNote) {
+  override fun removeItem(item: DateAndNoteDB) {
+    vm.delete(item)
+  }
+  
+  override fun editItem(item: DateAndNoteDB) {
     newEditNoteContract.launch(
-      Intent(this@MainActivity, AddActivity::class.java).apply {
+      Intent(this@MainActivity, DateAndNoteAddActivity::class.java).apply {
         this.putExtra(DATENOTE, item)
-      })
+      }
+    )
   }
   
-  override fun modifyItem(old: DateAndNote, isChecked: Boolean) {
-    val dateAndNoteAdapter = binding.recycle.adapter as DateAndNoteAdapter
-    val c = loadData(this).list.toMutableList().apply {
-      this.remove(old)
-      old.finished=isChecked
-      this.add(old)
-    }.sortedBy {
-      it.hours
-    }.also { list ->
-      saveData(DateAndNoteSaver(list), this)
-    }.filter {
-      it.time > daysee &&
-        GregorianCalendar().apply {
-          timeInMillis = daysee
-          add(Calendar.DAY_OF_YEAR, 1)
-        }.timeInMillis > it.time
-    }
-    dateAndNoteAdapter.submitList(c)
+  override fun modifyItem(old: DateAndNoteDB, isChecked: Boolean) {
+    vm.editNote(old.apply { finished=isChecked })
   }
   
-  override fun viewItem(item: DateAndNote) {
+  override fun viewItem(item: DateAndNoteDB) {
     startActivity(
       Intent(this@MainActivity, ViewNoteActivity::class.java).apply {
         this.putExtra(DATENOTE, item)
       })
   }
   
-  override fun viewPicture(item: DateAndNote) {
+  override fun viewPicture(item: DateAndNoteDB) {
     startActivity(
       Intent(this,ViewPictureActivity::class.java)
         .apply {

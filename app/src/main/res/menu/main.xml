@@ -2,29 +2,31 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/action_goto_day"
-        android:title="Ir a la fecha actual" />
+        android:title="Ir a la fecha actual"
+        android:icon="@drawable/ic_today_24"
+        />
     <item
         android:id="@+id/action_goto_date"
-        android:title="Ir a..." />
-    <item android:title="Exportar datos">
+        android:title="Ir a..."
+        android:icon="@drawable/baseline_calendar_today_24"/>
+    <item android:title="Exportar datos" android:icon="@drawable/ic_export_24">
         <menu>
             <item
                 android:id="@+id/action_export"
-                android:title="Exportar datos sin fotos" />
+                android:title="Exportar solo texto" />
             <item
                 android:id="@+id/action_export_new"
-                android:title="Exportar datos con fotos" />
+                android:title="Exportar texto y fotos" />
         </menu>
     </item>
-    <item android:title="Importar Datos">
+    <item android:title="Importar Datos" android:icon="@drawable/ic_import_24">
         <menu>
             <item
                 android:id="@+id/action_import"
-                android:title="Importar Datos sin fotos" />
+                android:title="Importar solo texto" />
             <item
                 android:id="@+id/action_import_new"
-                android:title="Importar Datos con fotos" />
-
+                android:title="Importar texto y fotos" />
         </menu>
     </item>
 </menu>

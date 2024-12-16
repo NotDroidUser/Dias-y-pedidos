@@ -6,10 +6,11 @@ import android.graphics.drawable.Drawable
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.nobody.diasypedidos.databinding.ActivityViewNoteBinding
+import com.nobody.diasypedidos.db.DateAndNoteDB
 import java.io.File
 
 class ViewNoteActivity :AppCompatActivity(){
-  private lateinit var date: DateAndNote
+  private lateinit var date: DateAndNoteDB
   private val binding:ActivityViewNoteBinding by lazy {  ActivityViewNoteBinding.inflate(layoutInflater) }
   
   @SuppressLint("SetTextI18n")
@@ -17,13 +18,13 @@ class ViewNoteActivity :AppCompatActivity(){
     super.onCreate(savedInstanceState)
     setContentView(binding.root)
     intent.extras?.let { bundle ->
-      bundle.getParcelableCompat<DateAndNote>(MainActivity.DATENOTE)?.let {
-        date = it.copy()
+      bundle.getParcelableCompat<DateAndNoteDB>(MainActivity.DATENOTE)?.let {
+        date = it
       }
     }
     savedInstanceState?.let{ state ->
-      state.getParcelableCompat<DateAndNote>(MainActivity.DATENOTE)?.let {
-        date = it.copy()
+      state.getParcelableCompat<DateAndNoteDB>(MainActivity.DATENOTE)?.let {
+        date = it
       }
     }
     if(!::date.isInitialized){
@@ -44,9 +45,9 @@ class ViewNoteActivity :AppCompatActivity(){
         )
       }
       messageText.text = date.text
-      addressText.text = date.direction
+      addressText.text = date.address
       appText.text = date.app
-      DateOf(date.time,date.hours,0).toText().also {
+      dateToText(date.time,date.hours,0).also {
         dateText.text=it
       }
       if(date.finished){
