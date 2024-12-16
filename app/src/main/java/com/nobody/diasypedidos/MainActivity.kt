@@ -34,6 +34,7 @@ import com.nobody.diasypedidos.db.DateAndNotesDatabase
 import com.nobody.diasypedidos.vm.DateAndNoteViewModel
 import com.nobody.diasypedidos.vm.DateAndNoteViewModelFactory
 import java.io.File
+import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.concurrent.TimeUnit
 import kotlin.math.absoluteValue
@@ -412,7 +413,9 @@ class MainActivity : AppCompatActivity(), DateAndNoteHandler {
   
   private fun showSelectDayDialog() {
     MaterialDialog(this).show {
-      datePicker { _, datetime ->
+      datePicker (currentDate = Calendar.getInstance().apply {
+        timeInMillis=vm.daySeeing
+      }){ _, datetime ->
         vm.daySeeing = datetime.let {
           it.dateOnly()
           it.timeInMillis
